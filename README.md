@@ -1,2 +1,2 @@
-# Starter-Code1
+# CS251 Splitwise Assignment
  

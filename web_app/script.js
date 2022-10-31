@@ -27,6 +27,23 @@ var BlockchainSplitwise = new ethers.Contract(contractAddress, abi, provider.get
 // TODO: Return a list of all users (creditors or debtors) in the system
 // All users in the system are everyone who has ever sent or received an IOU
 async function getUsers() {
+	//get array of addressses
+	//create new Set
+	//for each thing in array of addresses
+		//add thing to set
+		//
+
+
+
+	let retLedger = await getLedger();
+	var users = new Set();
+	for (var i = 0; i < retLedger.length; i++){
+		users.add(retLedger[i].debtor);
+		for (var j = 0; j < retLedger[i].IOUs.length; j++){ 
+			users.add(retLedger[i]["IOUs"][j]["creditor"]);
+		}
+	}
+	return Array.from(users);
 
 }
 

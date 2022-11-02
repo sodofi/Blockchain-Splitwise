@@ -9,12 +9,84 @@ var GENESIS = '0x000000000000000000000000000000000000000000000000000000000000000
 
 // This is the ABI for your contract (get it from Remix, in the 'Compile' tab)
 // ============================================================
-var abi = []; // FIXME: fill this in with your contract's ABI //Be sure to only have one array, not two
+var abi = [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "creditor",
+          "type": "address"
+        },
+        {
+          "internalType": "uint32",
+          "name": "amount",
+          "type": "uint32"
+        },
+        {
+          "internalType": "address[]",
+          "name": "cycle_path",
+          "type": "address[]"
+        }
+      ],
+      "name": "add_IOU",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "debtor",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "creditor",
+          "type": "address"
+        }
+      ],
+      "name": "lookup",
+      "outputs": [
+        {
+          "internalType": "uint32",
+          "name": "ret",
+          "type": "uint32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "map",
+      "outputs": [
+        {
+          "internalType": "uint32",
+          "name": "",
+          "type": "uint32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ]; // FIXME: fill this in with your contract's ABI //Be sure to only have one array, not two
 // ============================================================
 abiDecoder.addABI(abi);
 // call abiDecoder.decodeMethod to use this - see 'getAllFunctionCalls' for more
 
-var contractAddress = ""; // FIXME: fill this in with your contract's address/hash
+var contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // FIXME: fill this in with your contract's address/hash
 
 var BlockchainSplitwise = new ethers.Contract(contractAddress, abi, provider.getSigner());
 
@@ -24,25 +96,34 @@ var BlockchainSplitwise = new ethers.Contract(contractAddress, abi, provider.get
 
 // TODO: Add any helper functions here!
 
+async function getNeighbors(user) { 
+
+	// init empty set for neighbors 
+	var neighbors = new Set();
+	// get all available users and loop
+	var users = await getUsers(); 
+	for (let i = 0; i < users.length; i++) { 
+		// check if there is an edge connecting passed in user to i-th user 
+		var owed = await BlockchainSplitwise.lookup(user.toLowerCase(), users[i]);
+		// add if non-zero (thus there is edge)
+		if (owed > 0) neighbors.add(users[i]);
+	} // return as array 
+	return Array.from(neighbors); 
+}
+
 // TODO: Return a list of all users (creditors or debtors) in the system
 // All users in the system are everyone who has ever sent or received an IOU
 async function getUsers() {
-	//get array of addressses
-	//create new Set
-	//for each thing in array of addresses
-		//add thing to set
-		//
 
-
-
-	let retLedger = await getLedger();
+	// init empty set for users 
 	var users = new Set();
-	for (var i = 0; i < retLedger.length; i++){
-		users.add(retLedger[i].debtor);
-		for (var j = 0; j < retLedger[i].IOUs.length; j++){ 
-			users.add(retLedger[i]["IOUs"][j]["creditor"]);
-		}
-	}
+	// get array of all function calls to add_IOU, and loop 
+	var function_calls = await getAllFunctionCalls(contractAddress, "add_IOU");
+	for (let i = 0; i < function_calls.length; i++) {
+		// add from and to user to set 
+		users.add(function_calls[i].from.toLowerCase());
+		users.add(function_calls[i].args[0].toLowerCase());
+	} // return as array 
 	return Array.from(users);
 
 }
@@ -50,12 +131,27 @@ async function getUsers() {
 // TODO: Get the total amount owed by the user specified by 'user'
 async function getTotalOwed(user) {
 
+	var owed = 0;
+	// get signer 
+	var signer = provider.getSigner(defaultAccount);
+	// get all available users and loop 
+	var users = await getUsers(); 
+	for (let i = 0; i < users.length; i++) { 
+		// increment owed by result of lookup (NOTE: if no edge, returns 0)
+		owed += await BlockchainSplitwise.connect(signer).lookup(user.toLowerCase(), users[i]);
+	}	
+	return owed; 
+
 }
 
 // TODO: Get the last time this user has sent or received an IOU, in seconds since Jan. 1, 1970
 // Return null if you can't find any activity for the user.
 // HINT: Try looking at the way 'getAllFunctionCalls' is written. You can modify it if you'd like.
 async function getLastActive(user) {
+
+	// NOTE: per HINT, see edits to getAllFunctionCalls
+	var res = await getAllFunctionCalls(contractAddress, "add_IOU", true, user.toLowerCase());
+	return res;
 	
 }
 
@@ -63,6 +159,17 @@ async function getLastActive(user) {
 // The person you owe money is passed as 'creditor'
 // The amount you owe them is passed as 'amount'
 async function add_IOU(creditor, amount) {
+
+	// get signer (aka debtor in this case)
+	var debtor = provider.getSigner(defaultAccount);
+	debtor = debtor._address; 
+	// check for path from creditor to debtor (as this would yield a cycle)
+	var path = await doBFS(creditor, debtor, getNeighbors);
+	// if no path exists, we can just pass in an empty array 
+	if (path == null) {
+		path = Array(); 
+	}
+	await BlockchainSplitwise.connect(provider.getSigner(defaultAccount)).add_IOU(creditor, amount, path);
 	
 }
 
@@ -73,7 +180,7 @@ async function add_IOU(creditor, amount) {
 
 // This searches the block history for all calls to 'functionName' (string) on the 'addressOfContract' (string) contract
 // It returns an array of objects, one for each call, containing the sender ('from'), arguments ('args'), and the timestamp ('t')
-async function getAllFunctionCalls(addressOfContract, functionName) {
+async function getAllFunctionCalls(addressOfContract, functionName, getLast=false, user=null) {
 	var curBlock = await provider.getBlockNumber();
 	var function_calls = [];
 
@@ -84,25 +191,43 @@ async function getAllFunctionCalls(addressOfContract, functionName) {
 	  	var txn = txns[j];
 
 	  	// check that destination of txn is our contract
-			if(txn.to == null){continue;}
+		if(txn.to == null){continue;}
 	  	if (txn.to.toLowerCase() === addressOfContract.toLowerCase()) {
 	  		var func_call = abiDecoder.decodeMethod(txn.data);
+			// check that the function getting called in this txn is 'functionName'
+			if (func_call && func_call.name === functionName) {
+				var timeBlock = await provider.getBlock(curBlock);
+				var args = func_call.params.map(function (x) {return x.value});
+				function_calls.push({
+					from: txn.from.toLowerCase(),
+					args: args,
+					t: timeBlock.timestamp
+				})
 
-				// check that the function getting called in this txn is 'functionName'
-				if (func_call && func_call.name === functionName) {
-					var timeBlock = await provider.getBlock(curBlock);
-		  		var args = func_call.params.map(function (x) {return x.value});
-	  			function_calls.push({
-	  				from: txn.from.toLowerCase(),
-	  				args: args,
-						t: timeBlock.timestamp
-	  			})
-	  		}
+				// ADDED THIS CHUNK
+				// ***************************
+				if ( // check if we want to get last transaction, and if the user appears either as the creditor or debtor of these transactions
+					getLast && 
+					(txn.from.toLowerCase() === user.toLowerCase()  || args[0].toLowerCase()  === user.toLowerCase() )
+				) {
+					return timeBlock.timestamp;
+				}
+				// ***************************
+		}
+
 	  	}
 	  }
 	  curBlock = b.parentHash;
 	}
-	return function_calls;
+	// ADDED THIS CHUNK
+	// ***************************
+	// if we want get last, return null else return function calls 
+	if (getLast) { 
+		return null;
+	} else {
+		return function_calls;
+	}
+	// ***************************
 }
 
 // We've provided a breadth-first search implementation for you, if that's useful
@@ -229,6 +354,7 @@ async function sanityCheck() {
 	var response = await add_IOU(accounts[1], "10");
 
 	users = await getUsers();
+	console.log("has length %d", users.length)
 	score += check("getUsers() now length 2", users.length === 2);
 
 	owed = await getTotalOwed(accounts[0]);

@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/Users/sophiadew/CODE/CS251/Starter Code/contracts/mycontract.sol": {
-      "lastModificationDate": 1667001980581,
-      "contentHash": "9facd338d3e4ccac7f0feac59caf8411",
+      "lastModificationDate": 1667368115193,
+      "contentHash": "54a5663009027d55369ecd36f33045a1",
       "sourceName": "contracts/mycontract.sol",
       "solcConfig": {
         "version": "0.8.17",
